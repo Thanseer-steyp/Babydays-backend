@@ -5,7 +5,6 @@ CheckoutItem,Wishlist)
 from public.models import Product
 from django.db.models import Sum
 
-from rest_framework import serializers
 
 class CheckoutItemSerializer(serializers.Serializer):
     variant_id = serializers.IntegerField(source="variant.id")

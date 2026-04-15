@@ -7,6 +7,8 @@ from django.conf import settings
 class CheckoutSession(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    total_amount = models.FloatField(default=0)
+    razorpay_order_id = models.CharField(max_length=255, null=True, blank=True)
     STATUS_CHOICES = [
         ("active", "Active"),
         ("completed", "Completed"),

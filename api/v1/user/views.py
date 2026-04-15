@@ -19,13 +19,11 @@ class CreateCheckoutSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # ❌ Delete old active session
         CheckoutSession.objects.filter(
             user=request.user,
             status="active"
         ).delete()
 
-        # ✅ Create new session
         session = CheckoutSession.objects.create(
             user=request.user,
             status="active"
@@ -91,11 +89,11 @@ class CreateOrderView(APIView):
 
     def post(self, request):
         data = request.data
-        session_id = request.data.get("session_id")
+        addr = data.get("address", {})
+
 
         session = get_object_or_404(
             CheckoutSession,
-            id=session_id,
             user=request.user,
             status="active"
         )
@@ -103,21 +101,9 @@ class CreateOrderView(APIView):
         items = session.items.select_related("variant__product")
         addr = data.get("address", {})
 
-        if not items:
+        if not items.exists():
             return Response({"detail": "No items to checkout"}, status=400)
 
-        # ✅ Update existing session (DO NOT CREATE NEW ONE)
-        session.name = addr.get("name", "")
-        session.phone = addr.get("phone", "")
-        session.alt_phone = addr.get("alt_phone", "")
-        session.pincode = addr.get("pincode", "")
-        session.state = addr.get("state", "")
-        session.city = addr.get("city", "")
-        session.location = addr.get("location", "")
-        session.address_line = addr.get("address_line", "")
-        session.landmark = addr.get("landmark", "")
-
-        session.save()
 
         grand_total = 0
 
@@ -136,13 +122,6 @@ class CreateOrderView(APIView):
             delivery = float(product.delivery_charge or 0)
 
             item_total = (price * qty) + (delivery * qty)
-
-            # ✅ SAVE ITEM (CRITICAL FIX)
-            CheckoutItem.objects.create(
-                session=session,
-                variant=variant,
-                qty=qty
-            )
 
             grand_total += item_total
 
@@ -175,15 +154,15 @@ class CreateOrderView(APIView):
                     payment_status="initiated",
 
                     # ✅ FROM SESSION (SAFE)
-                    name=session.name,
-                    phone=session.phone,
-                    alt_phone=session.alt_phone,
-                    pincode=session.pincode,
-                    state=session.state,
-                    city=session.city,
-                    location=session.location,
-                    address_line=session.address_line,
-                    landmark=session.landmark,
+                    name=addr.get("name", ""),
+                    phone=addr.get("phone", ""),
+                    alt_phone=addr.get("alt_phone", ""),
+                    pincode=addr.get("pincode", ""),
+                    state=addr.get("state", ""),
+                    city=addr.get("city", ""),
+                    location=addr.get("location", ""),
+                    address_line=addr.get("address_line", ""),
+                    landmark=addr.get("landmark", ""),
                 )
                 orders.append(order)
                 variant.stock_qty -= qty
@@ -191,6 +170,7 @@ class CreateOrderView(APIView):
 
             session.status = "completed"
             session.save()
+            session.items.all().delete()
 
             Cart.objects.filter(user=request.user).delete()
             send_admin_order_email(orders)
@@ -199,7 +179,7 @@ class CreateOrderView(APIView):
                 "success": True,
                 "order_count": len(orders),
                 "grand_total": grand_total,
-            })
+            }, status=200)
 
         # PREPAID
         client = razorpay.Client(
@@ -229,6 +209,7 @@ class VerifyPaymentView(APIView):
 
     def post(self, request):
         data = request.data
+        addr = data.get("address", {})
 
         try:
             client = razorpay.Client(
@@ -258,6 +239,7 @@ class VerifyPaymentView(APIView):
             payment_channel = payment.get("method")
 
             orders = []
+            items = session.items.select_related("variant__product")
 
             with transaction.atomic():
                 for item in items:
@@ -294,26 +276,27 @@ class VerifyPaymentView(APIView):
                         payment_channel=payment_channel,
 
                         # ✅ SAFE ADDRESS FROM SESSION
-                        name=session.name,
-                        phone=session.phone,
-                        alt_phone=session.alt_phone,
-                        pincode=session.pincode,
-                        state=session.state,
-                        city=session.city,
-                        location=session.location,
-                        address_line=session.address_line,
-                        landmark=session.landmark,
+                        name=addr.get("name", ""),
+                        phone=addr.get("phone", ""),
+                        alt_phone=addr.get("alt_phone", ""),
+                        pincode=addr.get("pincode", ""),
+                        state=addr.get("state", ""),
+                        city=addr.get("city", ""),
+                        location=addr.get("location", ""),
+                        address_line=addr.get("address_line", ""),
+                        landmark=addr.get("landmark", ""),
                     )
                     orders.append(order)
 
                 # ✅ mark session used
                 session.status = "completed"
                 session.save()
+                session.items.all().delete()
 
             Cart.objects.filter(user=request.user).delete()
             send_admin_order_email(orders)
 
-            return Response({"success": True})
+            return Response({"success": True,"message": "Payment successful","channel": payment_channel})
 
         except SignatureVerificationError:
             return Response(
