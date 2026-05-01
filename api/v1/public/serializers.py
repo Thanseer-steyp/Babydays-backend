@@ -5,16 +5,25 @@ from public.models import Product, ProductVariant, ProductMedia, ProductCategory
 
 class ProductCategorySerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
+    banner = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductCategory
-        fields = ("id", "name","slug", "image")
+        fields = ("id", "name","slug", "image","banner")
 
     def get_image(self, obj):
         request = self.context.get("request")
 
         if obj.image:
             return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+
+        return None
+
+    def get_banner(self, obj):
+        request = self.context.get("request")
+
+        if obj.banner:
+            return request.build_absolute_uri(obj.banner.url) if request else obj.banner.url
 
         return None
 

@@ -19,6 +19,8 @@ class CreateCheckoutSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        is_buy_now = request.data.get("is_buy_now", False)
+
         CheckoutSession.objects.filter(
             user=request.user,
             status="active"
@@ -26,7 +28,8 @@ class CreateCheckoutSessionView(APIView):
 
         session = CheckoutSession.objects.create(
             user=request.user,
-            status="active"
+            status="active",
+            is_buy_now=is_buy_now
         )
 
         return Response({
@@ -172,7 +175,9 @@ class CreateOrderView(APIView):
             session.save()
             session.items.all().delete()
 
-            Cart.objects.filter(user=request.user).delete()
+            if not session.is_buy_now:
+                Cart.objects.filter(user=request.user).delete()
+
             send_admin_order_email(orders)
 
             return Response({
@@ -293,7 +298,8 @@ class VerifyPaymentView(APIView):
                 session.save()
                 session.items.all().delete()
 
-            Cart.objects.filter(user=request.user).delete()
+            if not session.is_buy_now:
+                Cart.objects.filter(user=request.user).delete()
             send_admin_order_email(orders)
 
             return Response({"success": True,"message": "Payment successful","channel": payment_channel})
@@ -344,6 +350,7 @@ class MeView(APIView):
         return Response({
             "username": user.username,
             "email": user.email,
+            "name": user.first_name,
             "is_superuser": user.is_superuser,
             "is_staff": user.is_staff,
         })
@@ -353,37 +360,22 @@ class AddToCartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, slug):
-        size = request.data.get("size")
+        variant_id = request.data.get("variant_id")
 
-        if not size:
-            return Response(
-                {"detail": "Size is required"},
-                status=400
-            )
+        if not variant_id:
+            return Response({"detail": "variant_id is required"}, status=400)
 
-        product = get_object_or_404(
-            Product,
-            slug=slug,
+        product = get_object_or_404(Product, slug=slug, is_available=True)
+
+        variant = get_object_or_404(
+            ProductVariant,
+            id=variant_id,
+            product=product,
             is_available=True
         )
 
-        variant = ProductVariant.objects.filter(
-            product=product,
-            size=size,
-            is_active=True
-        ).first()
-
-        if not variant:
-            return Response(
-                {"detail": "Invalid or unavailable size"},
-                status=400
-            )
-
         if variant.stock_qty < 1:
-            return Response(
-                {"detail": "Out of stock"},
-                status=400
-            )
+            return Response({"detail": "Out of stock"}, status=400)
 
         cart_item, created = Cart.objects.get_or_create(
             user=request.user,
@@ -393,18 +385,15 @@ class AddToCartView(APIView):
 
         if not created:
             if cart_item.quantity >= variant.stock_qty:
-                return Response(
-                    {"detail": "Stock limit reached"},
-                    status=400
-                )
+                return Response({"detail": "Stock limit reached"}, status=400)
+
             cart_item.quantity += 1
             cart_item.save()
 
-        return Response(
-            {"message": "Added to cart"},
-            status=200
-        )
-
+        return Response({
+            "message": "Added to cart",
+            "quantity": cart_item.quantity
+        }, status=200)
 
 
 
@@ -412,20 +401,31 @@ class RemoveFromCartView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, slug):
-        size = request.data.get("size")
-        if not size:
-            return Response({"detail": "Size required"}, status=400)
+        variant_id = request.data.get("variant_id")
 
-        product = Product.objects.filter(slug=slug).first()
+        if not variant_id:
+            return Response({"detail": "variant_id is required"}, status=400)
 
+        product = get_object_or_404(Product, slug=slug)
 
-        if not product:
-            return Response({"detail": "Product not found"}, status=404)
+        variant = get_object_or_404(
+            ProductVariant,
+            id=variant_id,
+            product=product
+        )
 
-        variant = ProductVariant.objects.get(product=product, size=size)
-        Cart.objects.filter(user=request.user, variant=variant).delete()
+        cart_item = Cart.objects.filter(
+            user=request.user,
+            variant=variant
+        ).first()
+
+        if not cart_item:
+            return Response({"detail": "Item not found in cart"}, status=404)
+
+        cart_item.delete()
 
         return Response({"message": "Removed from cart"}, status=200)
+
 
 
 class CartListView(APIView):
@@ -443,10 +443,21 @@ class UpdateCartQtyView(APIView):
 
     def patch(self, request, slug):
         action = request.data.get("action")
-        size = request.data.get("size")
+        variant_id = request.data.get("variant_id")
+
+        if not variant_id:
+            return Response({"detail": "variant_id is required"}, status=400)
+
+        if action not in ["increase", "decrease"]:
+            return Response({"detail": "Invalid action"}, status=400)
 
         product = get_object_or_404(Product, slug=slug)
-        variant = get_object_or_404(ProductVariant, product=product, size=size)
+
+        variant = get_object_or_404(
+            ProductVariant,
+            id=variant_id,
+            product=product
+        )
 
         cart_item = get_object_or_404(
             Cart,
@@ -462,15 +473,24 @@ class UpdateCartQtyView(APIView):
                 )
             cart_item.quantity += 1
 
-        elif action == "decrease" and cart_item.quantity > 1:
+        elif action == "decrease":
+            if cart_item.quantity <= 1:
+                # optional: auto remove if qty = 1
+                cart_item.delete()
+                return Response({
+                    "message": "Item removed from cart",
+                    "quantity": 0
+                }, status=200)
+
             cart_item.quantity -= 1
 
         cart_item.save()
 
         return Response({
-            "qty": cart_item.quantity,
+            "message": "Quantity updated",
+            "quantity": cart_item.quantity,
             "available_stock": variant.stock_qty
-        })
+        }, status=200)
 
 
 

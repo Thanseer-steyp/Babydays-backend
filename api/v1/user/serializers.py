@@ -3,6 +3,7 @@ from rest_framework import serializers
 from user.models import (Cart,Address,Order,ProductRating,CheckoutSession,
 CheckoutItem,Wishlist)
 from public.models import Product
+from api.v1.public.serializers import ProductSerializer
 from django.db.models import Sum
 
 
@@ -54,11 +55,13 @@ class CartSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source="product.title", read_only=True)
     size = serializers.CharField(source="variant.size", read_only=True)
     price = serializers.DecimalField(source="variant.price", max_digits=10, decimal_places=2, read_only=True)
-    image1 = serializers.ImageField(source="product.image1", read_only=True)
+    image = serializers.ImageField(source="variant.image", read_only=True)
     slug = serializers.CharField(source="product.slug", read_only=True)
     stock = serializers.IntegerField(source="variant.stock_qty", read_only=True)
-    mrp = serializers.DecimalField(source="product.mrp",max_digits=10,decimal_places=2)
-    delivery_charge = serializers.DecimalField(source="product.delivery_charge",max_digits=10,decimal_places=2)
+    variant_id = serializers.IntegerField(source="variant.id", read_only=True)
+
+    mrp = serializers.DecimalField(source="product.mrp", max_digits=10, decimal_places=2)
+    delivery_charge = serializers.DecimalField(source="product.delivery_charge", max_digits=10, decimal_places=2)
 
     class Meta:
         model = Cart
@@ -69,33 +72,26 @@ class CartSerializer(serializers.ModelSerializer):
             "price",
             "mrp",
             "delivery_charge",
-            "image1",
+            "image",
             "slug",
             "quantity",
             "size",
-            'stock'
+            "stock",
+            "variant_id",   # ✅ important
         ]
 
 
 
-
-
-class WishlistSerializer(serializers.ModelSerializer):
-    slug = serializers.CharField(read_only=True)
-
-    class Meta:
-        model = Product
+class WishlistSerializer(ProductSerializer):
+    class Meta(ProductSerializer.Meta):
         fields = [
             "id",
             "title",
             "price",
-            "image1",
+            "main_media",
+            "average_rating",
             "slug",
         ]
-
-    
-
-
 
 
 class ProductRatingSerializer(serializers.ModelSerializer):
@@ -126,9 +122,9 @@ class OrderSerializer(serializers.ModelSerializer):
     def get_product_image(self, obj):
         try:
             Product.objects.get(slug=obj.product_slug)
-            if product.image1:
+            if product.image:
                 request = self.context.get("request")
-                return request.build_absolute_uri(product.image1.url) if request else product.image1.url
+                return request.build_absolute_uri(product.image.url) if request else product.image.url
             return None
         except Product.DoesNotExist:
             return None

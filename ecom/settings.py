@@ -107,12 +107,6 @@ REST_FRAMEWORK = {
     )
 }
 
-# REST_FRAMEWORK = {
-#     "DEFAULT_AUTHENTICATION_CLASSES": (
-#         "rest_framework_simplejwt.authentication.JWTAuthentication",
-#     )
-# }
-
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -121,6 +115,10 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
 ]
+
+# CSRF_TRUSTED_ORIGINS = [
+#     "https://yourfrontend.com",
+# ]
 
 RAZORPAY_KEY_ID = "rzp_test_RjuxivZiT2rO2J"
 RAZORPAY_KEY_SECRET = "HoQdu7d5i7vIsUcvOzK95HT5"

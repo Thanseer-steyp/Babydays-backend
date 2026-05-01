@@ -15,6 +15,7 @@ class CheckoutSession(models.Model):
         ("expired", "Expired"),
     ]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    is_buy_now = models.BooleanField(default=False)
 
     def __str__(self):
         return f"Session {self.id} - {self.user.username} - {self.status}"

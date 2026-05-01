@@ -5,6 +5,7 @@ from django.utils.text import slugify
 class ProductCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
     image = models.ImageField(upload_to="categories/", blank=True, null=True)
+    banner = models.ImageField(upload_to="categories/", blank=True, null=True)
     slug = models.SlugField(unique=True, blank=True,editable=False) 
 
     def __str__(self):

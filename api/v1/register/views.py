@@ -9,7 +9,6 @@ from .serializers import EmailAuthSerializer
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-from rest_framework.views import APIView
 
 class RefreshTokenView(APIView):
     def post(self, request):
@@ -19,17 +18,32 @@ class RefreshTokenView(APIView):
             return Response({"error": "No refresh token"}, status=400)
 
         try:
-            token = RefreshToken(refresh_token)
-            new_access = str(token.access_token)
+            old_token = RefreshToken(refresh_token)
+
+            # 🔥 rotate properly
+            new_refresh = RefreshToken.for_user(old_token.user)
+            new_access = str(new_refresh.access_token)
 
             response = Response({"message": "Token refreshed"})
+
             response.set_cookie(
                 key="access",
                 value=new_access,
                 httponly=True,
                 secure=False,
                 samesite="Lax",
+                max_age=60 * 60,
             )
+
+            response.set_cookie(
+                key="refresh",
+                value=str(new_refresh),
+                httponly=True,
+                secure=False,
+                samesite="Lax",
+                max_age=7 * 24 * 60 * 60,
+            )
+
             return response
 
         except Exception:
