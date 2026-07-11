@@ -2,6 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 
+
 class ProductCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
     image = models.ImageField(upload_to="categories/", blank=True, null=True)
@@ -44,7 +45,7 @@ class Product(models.Model):
     ]
 
     title = models.CharField(max_length=200)
-    slug = models.SlugField(unique=True, blank=True,editable=False)
+    slug = models.SlugField(unique=True, blank=True)
     age_category = models.CharField(
         max_length=20,
         choices=AGE_CATEGORY_CHOICES,

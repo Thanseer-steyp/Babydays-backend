@@ -108,6 +108,7 @@ class CreateOrderView(APIView):
             return Response({"detail": "No items to checkout"}, status=400)
 
 
+        COD_CHARGE = settings.COD_CHARGE
         grand_total = 0
 
         for item in items:
@@ -130,61 +131,83 @@ class CreateOrderView(APIView):
 
         # COD
         if data.get("payment_method") == "cod":
-            orders = []
 
-            for item in items:
-                variant = item.variant
-                product = variant.product
-                qty = item.qty
+            client = razorpay.Client(
+                auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+            )
 
-                price = float(variant.price)
-                mrp = float(variant.mrp)
-                delivery = float(product.delivery_charge or 0)
+            razorpay_order = client.order.create({
+                "amount": COD_CHARGE  * 100,      # ₹60 in paise
+                "currency": "INR",
+                "payment_capture": 1,
+            })
 
-                order = Order.objects.create(
-                    user=request.user,
-                    product_name=product.title,
-                    product_slug=product.slug,
-                    variant=variant,
-                    size=variant.size,
-                    qty=qty,
-                    price=price * qty,
-                    mrp=mrp * qty,
-                    discount=(mrp - price) * qty,
-                    delivery_charge=delivery * qty,
-                    total=(price * qty) + (delivery * qty),
-                    payment_method="cod",
-                    payment_status="initiated",
-
-                    # ✅ FROM SESSION (SAFE)
-                    name=addr.get("name", ""),
-                    phone=addr.get("phone", ""),
-                    alt_phone=addr.get("alt_phone", ""),
-                    pincode=addr.get("pincode", ""),
-                    state=addr.get("state", ""),
-                    city=addr.get("city", ""),
-                    location=addr.get("location", ""),
-                    address_line=addr.get("address_line", ""),
-                    landmark=addr.get("landmark", ""),
-                )
-                orders.append(order)
-                variant.stock_qty -= qty
-                variant.save()
-
-            session.status = "completed"
+            session.razorpay_order_id = razorpay_order["id"]
+            session.total_amount = COD_CHARGE
             session.save()
-            session.items.all().delete()
-
-            if not session.is_buy_now:
-                Cart.objects.filter(user=request.user).delete()
-
-            send_admin_order_email(orders)
 
             return Response({
                 "success": True,
-                "order_count": len(orders),
-                "grand_total": grand_total,
-            }, status=200)
+                "is_cod": True,
+                "razorpay_order_id": razorpay_order["id"],
+                "amount": razorpay_order["amount"],
+                "razorpay_key": settings.RAZORPAY_KEY_ID,
+            })
+            # orders = []
+
+            # for item in items:
+            #     variant = item.variant
+            #     product = variant.product
+            #     qty = item.qty
+
+            #     price = float(variant.price)
+            #     mrp = float(variant.mrp)
+            #     delivery = float(product.delivery_charge or 0)
+
+            #     order = Order.objects.create(
+            #         user=request.user,
+            #         product_name=product.title,
+            #         product_slug=product.slug,
+            #         variant=variant,
+            #         size=variant.size,
+            #         qty=qty,
+            #         price=price * qty,
+            #         mrp=mrp * qty,
+            #         discount=(mrp - price) * qty,
+            #         delivery_charge=delivery * qty,
+            #         total=(price * qty) + (delivery * qty),
+            #         payment_method="cod",
+            #         payment_status="initiated",
+
+            #         # ✅ FROM SESSION (SAFE)
+            #         name=addr.get("name", ""),
+            #         phone=addr.get("phone", ""),
+            #         alt_phone=addr.get("alt_phone", ""),
+            #         pincode=addr.get("pincode", ""),
+            #         state=addr.get("state", ""),
+            #         city=addr.get("city", ""),
+            #         location=addr.get("location", ""),
+            #         address_line=addr.get("address_line", ""),
+            #         landmark=addr.get("landmark", ""),
+            #     )
+            #     orders.append(order)
+            #     variant.stock_qty -= qty
+            #     variant.save()
+
+            # session.status = "completed"
+            # session.save()
+            # session.items.all().delete()
+
+            # if not session.is_buy_now:
+            #     Cart.objects.filter(user=request.user).delete()
+
+            # send_admin_order_email(orders)
+
+            # return Response({
+            #     "success": True,
+            #     "order_count": len(orders),
+            #     "grand_total": grand_total,
+            # }, status=200)
 
         # PREPAID
         client = razorpay.Client(
@@ -215,6 +238,8 @@ class VerifyPaymentView(APIView):
     def post(self, request):
         data = request.data
         addr = data.get("address", {})
+        COD_CHARGE = settings.COD_CHARGE
+        
 
         try:
             client = razorpay.Client(
@@ -245,6 +270,7 @@ class VerifyPaymentView(APIView):
 
             orders = []
             items = session.items.select_related("variant__product")
+            is_cod = session.total_amount == COD_CHARGE
 
             with transaction.atomic():
                 for item in items:
@@ -273,8 +299,9 @@ class VerifyPaymentView(APIView):
                         discount=(mrp - price) * qty,
                         delivery_charge=delivery * qty,
                         total=(price * qty) + (delivery * qty),
-                        payment_method="prepaid",
-                        payment_status="paid",
+                        payment_method = "cod" if is_cod else "prepaid",
+                        payment_status = "cod_charge_paid" if is_cod else "paid",
+                        cod_charge = COD_CHARGE if is_cod else 0,
                         razorpay_order_id=data["razorpay_order_id"],
                         razorpay_payment_id=data["razorpay_payment_id"],
                         razorpay_signature=data["razorpay_signature"],

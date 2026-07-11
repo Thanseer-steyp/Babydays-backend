@@ -120,8 +120,8 @@ CORS_ALLOWED_ORIGINS = [
 #     "https://yourfrontend.com",
 # ]
 
-RAZORPAY_KEY_ID = "rzp_test_RjuxivZiT2rO2J"
-RAZORPAY_KEY_SECRET = "HoQdu7d5i7vIsUcvOzK95HT5"
+RAZORPAY_KEY_ID = "rzp_test_TCEh1H6fKo8adJ"
+RAZORPAY_KEY_SECRET = "SLa7xhxMJOGF13cQ52HYmcUb"
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
@@ -147,3 +147,6 @@ else:
     DEFAULT_FROM_EMAIL = EMAIL_HOST_USER 
     ORDER_NOTIFICATION_EMAIL = "thanseertpm5@gmail.com"
 
+
+
+COD_CHARGE = 60

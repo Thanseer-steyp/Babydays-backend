@@ -83,6 +83,7 @@ class Wishlist(models.Model):
 class Order(models.Model):
     PAYMENT_STATUS_CHOICES = [
         ("initiated", "Initiated"),
+        ("cod_charge_paid", "COD Charge Paid"),
         ("paid", "Paid"),
         ("failed", "Failed"),
     ]
@@ -119,6 +120,7 @@ class Order(models.Model):
         max_length=20, choices=PAYMENT_CHANNEL_CHOICES, blank=True
     )
     delivery_charge = models.FloatField(default=0)
+    cod_charge = models.FloatField(default=0)
     total = models.FloatField()
     razorpay_order_id = models.CharField(max_length=255, blank=True)
     razorpay_payment_id = models.CharField(max_length=255, blank=True)

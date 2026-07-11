@@ -121,17 +121,27 @@ class OrderSerializer(serializers.ModelSerializer):
         ]
     def get_product_image(self, obj):
         try:
-            Product.objects.get(slug=obj.product_slug)
-            if product.image:
+            product = Product.objects.get(slug=obj.product_slug)
+
+            # Use the main media instead of product.image
+            main_media = product.media.filter(is_main=True).first() or product.media.first()
+
+            if main_media and main_media.media:
                 request = self.context.get("request")
-                return request.build_absolute_uri(product.image.url) if request else product.image.url
+                return (
+                    request.build_absolute_uri(main_media.media.url)
+                    if request
+                    else main_media.media.url
+                )
+
             return None
+
         except Product.DoesNotExist:
             return None
 
     def get_product_category(self, obj):
         product = Product.objects.filter(slug=obj.product_slug).first()
-        return product.product_category if product else None
+        return product.product_category.name if product and product.product_category else None
 
     def get_is_reviewed(self, obj):
         return ProductRating.objects.filter(order=obj).exists()
